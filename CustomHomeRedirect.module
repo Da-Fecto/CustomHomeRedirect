@@ -1,0 +1,83 @@
+<?php
+/**
+ * Hide top nav items (0.0.1)
+ * Module to hide top nav items for non superusers.
+ *
+ * @author Martijn Geerts (Calago) mgeerts@calago.nl
+ *
+ * ProcessWire 2.x
+ * Copyright (C) 2011 by Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ *
+ */
+
+class CustomHomeRedirect extends WireData implements Module, ConfigurableModule {
+
+    public static function getModuleInfo() {
+        return array(
+            'title' => __("Custom Home Redirect"),
+            'version' => "0.0.1",
+            'summary' => __("Before ProcessHome and up-on Pagelist, redirect the user to the selected page."),
+            'author' => "Martijn Geerts",
+            'icon' => 'share',
+            'autoload' => function () {
+                if (wire('user')->isSuperuser()) return false;
+                if (wire('user')->hasPermission('ignore-home-redirect')) return false;
+                return true;
+            },
+            'singular' => true,
+            'permissions' => array(
+                'ignore-home-redirect' => __("Don't overwrite the behaviour of ProcessHome and allow the Pagelist."),
+                ),
+        );
+    }
+
+    public static $configDefaults = array(
+        "redirect" => null,
+    );
+
+    // Redirect URL
+    protected $url = '/';
+
+    public function init() {
+        $id = $this->redirect;
+        if (!$id) return;
+        $p = $this->pages->get($id);
+        if (!$p->id) return;
+        $this->url = $p->url;
+        // Users Accidentally hitting ProcessPageList
+        if ($this->page->process == 'ProcessPageList') { $this->redirect(); }
+        // Replace ProcessHome execute method (avoid double redirect)
+        $this->addHookBefore('ProcessHome::execute', $this, 'redirect');
+    }
+
+    /**
+     * Redirect to selected Page
+     *
+     */
+    protected function redirect() {
+        $this->session->redirect($this->url);
+    }
+
+    public static function getModuleConfigInputfields(array $data) {
+
+        $data = array_merge(self::$configDefaults, $data);
+
+        $form = new InputfieldWrapper();
+        $f = wire('modules')->get('InputfieldPageListSelect');
+        $f->name = 'redirect';
+        $f->parent_id = 2;
+        $f->label = __('Redirect to');
+        $f->description =
+            __("Redirect to the selected Page.") .
+            " " .
+            __("Bypassing the Pagelist.");
+        $f->value = (int) $data['redirect'];
+        $f->notes = __("This module will not execute for superusers & users having the permission 'ignore-home-redirect'");
+        $form->append($f);
+        return $form;
+    }
+}
